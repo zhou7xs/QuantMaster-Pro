@@ -443,43 +443,114 @@ def render_pay_section():
 # ═══════════════════════════════════════════
 def render_sidebar():
     auth = st.session_state["auth"]
+
     with st.sidebar:
+        # ── 顶部：账户widget（始终显示）────────────────────────────
         if not auth["logged_in"]:
-            st.markdown("### 📈 QuantMaster Pro")
-            st.markdown("**专业A股量化交易系统**")
-            st.markdown("---")
-            render_auth()
-            return
-        # 已登录
-        render_account_menu()
-        # 导航
+            with st.expander("🔐 登录 / 注册", expanded=True):
+                _render_auth_compact()
+        else:
+            with st.expander(f"👤 {auth['username']}（{_get_status_label(auth['username'])}）", expanded=True):
+                _render_account_compact()
+
+        st.markdown("---")
+
+        # ── 导航（始终可见）────────────────────────────────────────
         st.markdown('<p class="nav-section">◈ 功能模块</p>', unsafe_allow_html=True)
-        pages = [
-            ("📊 行情数据", "nav-market"),
-            ("✏️ 策略编辑", "nav-strategy"),
-            ("🧪 历史回测", "nav-backtest"),
-            ("🎮 模拟交易", "nav-paper"),
-            ("💹 实盘终端", "nav-live"),
-            ("📈 绩效分析", "nav-report"),
-            ("🛡️ 风险管理", "nav-risk"),
-        ]
         cur = st.session_state.get("page", "行情数据")
-        for label, cls in pages:
-            key = f"nav_{label[:2]}"
-            if st.button(label, key=key, use_container_width=True):
-                st.session_state["page"] = label[2:]
+        pages = [
+            ("📊 行情数据", "行情数据"),
+            ("✏️ 策略编辑", "策略编辑"),
+            ("🧪 历史回测", "历史回测"),
+            ("🎮 模拟交易", "模拟交易"),
+            ("💹 实盘终端", "实盘终端"),
+            ("📈 绩效分析", "绩效分析"),
+            ("🛡️ 风险管理", "风险管理"),
+        ]
+        for label, page_name in pages:
+            cls = "nav-btn active" if cur == page_name else "nav-btn"
+            st.markdown(f'<button class="{cls}" onclick="return false">{label}</button>',
+                        unsafe_allow_html=True)
+            if st.button(label, key=f"nav_{page_name}", use_container_width=True):
+                st.session_state["page"] = page_name
                 for k in ["pending_order","pending_plan","pending_amount","pending_method"]:
                     if k in st.session_state:
                         del st.session_state[k]
                 st.rerun()
-            # 高亮
-        # 管理入口
-        if auth["role"] == "admin":
+
+        if auth["logged_in"] and auth["role"] == "admin":
             st.markdown("---")
             st.markdown('<p class="nav-section">◈ 系统管理</p>', unsafe_allow_html=True)
             if st.button("⚙️ 管理后台", use_container_width=True):
                 st.session_state["page"] = "__admin__"
                 st.rerun()
+
+
+def _render_auth_compact():
+    """紧凑登录/注册表单（用于expander内）"""
+    sub = st.radio("登录 / 注册", ["登录", "注册"], horizontal=True, label_visibility="collapsed")
+    if sub == "登录":
+        with st.form("login_c", clear_on_submit=True):
+            u = st.text_input("用户名", placeholder="输入用户名", label_visibility="collapsed")
+            p = st.text_input("密码", type="password", placeholder="密码", label_visibility="collapsed")
+            if st.form_submit_button("登录", use_container_width=True):
+                if u and p:
+                    user = verify_user(u, p)
+                    if user:
+                        update_login(u)
+                        st.session_state["auth"] = {
+                            "logged_in": True, "username": u,
+                            "role": user["role"], "status": user["status"]
+                        }
+                        st.rerun()
+                    else:
+                        st.error("用户名或密码错误")
+                else:
+                    st.error("请填写用户名和密码")
+    else:
+        with st.form("reg_c", clear_on_submit=True):
+            u2 = st.text_input("用户名", placeholder="设置用户名（3-20位字母数字）", label_visibility="collapsed")
+            e2 = st.text_input("邮箱（选填）", placeholder="your@email.com", label_visibility="collapsed")
+            p2 = st.text_input("密码", type="password", placeholder="密码（至少6位）", label_visibility="collapsed")
+            p3 = st.text_input("确认密码", type="password", placeholder="再次输入密码", label_visibility="collapsed")
+            if st.form_submit_button("注册（享7天试用）", use_container_width=True):
+                if not u2 or not p2:
+                    st.error("用户名和密码不能为空")
+                elif len(p2) < 6:
+                    st.error("密码至少6位")
+                elif p2 != p3:
+                    st.error("两次密码不一致")
+                elif not re.match(r"^[a-zA-Z0-9_]{3,20}$", u2):
+                    st.error("用户名3-20位字母/数字/下划线")
+                else:
+                    ok, msg = create_user(u2, p2, e2)
+                    if ok:
+                        st.success("注册成功！请切换到登录")
+                    else:
+                        st.error(msg)
+
+
+def _render_account_compact():
+    """已登录账户信息 + 续费入口"""
+    auth = st.session_state["auth"]
+    status_raw = _get_status_label(auth["username"])
+    if "试用" in status_raw or "到期" in status_raw:
+        st.warning(f"⏰ {status_raw}")
+        with st.expander("立即续费"):
+            render_pay_section()
+    if st.button("🚪 退出登录", use_container_width=True):
+        st.session_state["auth"] = {"logged_in": False, "username": "", "role": "", "status": ""}
+        st.rerun()
+
+
+def _get_status_label(username):
+    s = get_user_status(username)
+    if s == "admin": return "管理员"
+    if s == "paid": return "正式会员"
+    if s and s.startswith("trial_"):
+        return f"试用中（剩{s.split('_')[1]}天）"
+    if s in ("trial_expired", "expired"): return "试用已到期"
+    return "正式会员"
 
 # ═══════════════════════════════════════════
 # 访问控制

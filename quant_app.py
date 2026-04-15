@@ -302,90 +302,6 @@ button[data-baseweb="tab"]{font-size:.9rem;}
 """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════
-# 认证模块
-# ═══════════════════════════════════════════
-def render_auth():
-    tab1, tab2 = st.tabs(["🔐 登录", "📝 注册"])
-    with tab1:
-        with st.form("login_form", clear_on_submit=True):
-            st.markdown('<p class="auth-title">欢迎回来</p>', unsafe_allow_html=True)
-            username = st.text_input("用户名", placeholder="输入用户名")
-            password = st.text_input("密码", type="password", placeholder="输入密码")
-            submitted = st.form_submit_button("登录", use_container_width=True)
-            if submitted:
-                if not username or not password:
-                    st.error("请填写用户名和密码")
-                else:
-                    user = verify_user(username, password)
-                    if user:
-                        update_login(username)
-                        st.session_state["auth"] = {
-                            "logged_in": True,
-                            "username": username,
-                            "role": user["role"],
-                            "status": user["status"]
-                        }
-                        st.rerun()
-                    else:
-                        st.error("用户名或密码错误")
-        st.markdown("---")
-        st.caption("**演示账户**：用户名 `admin` / 密码 `admin888`（管理员）")
-    with tab2:
-        with st.form("register_form", clear_on_submit=True):
-            st.markdown('<p class="auth-title">创建账户</p>', unsafe_allow_html=True)
-            st.markdown('<p class="auth-sub">注册即享 <strong>7天免费试用</strong></p>', unsafe_allow_html=True)
-            new_user = st.text_input("用户名", placeholder="设置用户名（唯一）")
-            new_email = st.text_input("邮箱（选填）", placeholder="your@email.com")
-            new_pw = st.text_input("密码", type="password", placeholder="设置密码（至少6位）")
-            new_pw2 = st.text_input("确认密码", type="password", placeholder="再次输入密码")
-            reg_submitted = st.form_submit_button("注册", use_container_width=True)
-            if reg_submitted:
-                if not new_user or not new_pw:
-                    st.error("用户名和密码不能为空")
-                elif len(new_pw) < 6:
-                    st.error("密码至少6位")
-                elif new_pw != new_pw2:
-                    st.error("两次密码不一致")
-                elif not re.match(r"^[a-zA-Z0-9_]{3,20}$", new_user):
-                    st.error("用户名只能是字母、数字、下划线，3-20位")
-                else:
-                    ok, msg = create_user(new_user, new_pw, new_email)
-                    if ok:
-                        st.success(f"✅ {msg}，请切换到登录页登录")
-                    else:
-                        st.error(msg)
-
-def render_account_menu():
-    auth = st.session_state["auth"]
-    user = get_user(auth["username"]) if auth["logged_in"] else {}
-    status_raw = get_user_status(auth["username"])
-    if status_raw == "admin":
-        badge_cls, badge_txt = "status-admin", "管理员"
-    elif status_raw == "paid":
-        badge_cls, badge_txt = "status-paid", "正式会员"
-    elif status_raw and status_raw.startswith("trial_"):
-        days = status_raw.split("_")[1]
-        badge_cls, badge_txt = "status-trial", f"试用中（剩余{days}天）"
-    elif status_raw == "trial_expired":
-        badge_cls, badge_txt = "status-expired", "试用已到期"
-    else:
-        badge_cls, badge_txt = "status-expired", "已过期"
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        st.markdown(f"👤 **{auth['username']}**")
-        st.markdown(f'<span class="status-badge {badge_cls}">{badge_txt}</span>', unsafe_allow_html=True)
-    with col2:
-        if st.button("🚪 退出", use_container_width=True):
-            st.session_state["auth"] = {"logged_in": False, "username": "", "role": "", "status": ""}
-            st.rerun()
-    st.markdown("---")
-    # 试用到期提示
-    if status_raw in ["trial_expired", "expired"]:
-        st.warning("⏰ 您的账户已到期，请续费继续使用")
-        with st.expander("立即续费"):
-            render_pay_section()
-
-# ═══════════════════════════════════════════
 # 支付模块
 # ═══════════════════════════════════════════
 PAY_PLANS = {
@@ -407,7 +323,6 @@ def render_pay_section():
             st.session_state["pending_plan"] = plan_key
             st.session_state["pending_amount"] = PAY_PLANS[plan_key]["price"]
             st.session_state["pending_method"] = method_code
-            st.rerun()
     if "pending_order" in st.session_state:
         order_no = st.session_state["pending_order"]
         plan = st.session_state["pending_plan"]
@@ -422,13 +337,14 @@ def render_pay_section():
         with col_b:
             if method == "wechat":
                 st.markdown("**💬 微信支付**")
-                st.markdown("打开微信 → 扫一扫 → 向以下账户付款")
-                st.image("https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=wechat://", width=180)
+                st.markdown("打开微信 → 扫一扫 → 向收款方付款")
+                st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=Tencent%3A%2F%2Fdl%2Fqr%2F{order_no}", width=180)
             else:
                 st.markdown("**💰 支付宝支付**")
-                st.markdown("打开支付宝 → 扫一扫 → 向以下账户付款")
-                st.image("https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=alipay://", width=180)
-        st.markdown("**支付完成后联系管理员确认订单，管理员后台：admin账户 → 管理面板 → 订单管理 → 确认**")
+                st.markdown("打开支付宝 → 扫一扫 → 向收款方付款")
+                st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=alipays%3A%2F%2Fplatformapi%2Fstartapp%3FappId%3D20000001%26order%3D{order_no}", width=180)
+        st.info("📋 **操作步骤**：截图保存订单号 → 扫码支付 → 联系管理员确认 → 管理员后台确认后权限自动开通")
+
         st.text_input("输入管理员口令确认订单（如已支付）", key="admin_confirm_input")
         if st.button("申请续期"):
             st.warning("请等待管理员在后处理您的付款确认")
@@ -436,7 +352,6 @@ def render_pay_section():
             for k in ["pending_order", "pending_plan", "pending_amount", "pending_method"]:
                 if k in st.session_state:
                     del st.session_state[k]
-            st.rerun()
 
 # ═══════════════════════════════════════════
 # 侧边栏
@@ -476,14 +391,12 @@ def render_sidebar():
                 for k in ["pending_order","pending_plan","pending_amount","pending_method"]:
                     if k in st.session_state:
                         del st.session_state[k]
-                st.rerun()
 
         if auth["logged_in"] and auth["role"] == "admin":
             st.markdown("---")
             st.markdown('<p class="nav-section">◈ 系统管理</p>', unsafe_allow_html=True)
             if st.button("⚙️ 管理后台", use_container_width=True):
                 st.session_state["page"] = "__admin__"
-                st.rerun()
 
 
 def _render_auth_compact():
@@ -502,7 +415,6 @@ def _render_auth_compact():
                             "logged_in": True, "username": u,
                             "role": user["role"], "status": user["status"]
                         }
-                        st.rerun()
                     else:
                         st.error("用户名或密码错误")
                 else:
@@ -540,7 +452,6 @@ def _render_account_compact():
             render_pay_section()
     if st.button("🚪 退出登录", use_container_width=True):
         st.session_state["auth"] = {"logged_in": False, "username": "", "role": "", "status": ""}
-        st.rerun()
 
 
 def _get_status_label(username):

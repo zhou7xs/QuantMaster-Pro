@@ -357,49 +357,48 @@ def render_pay_section():
 # 侧边栏
 # ═══════════════════════════════════════════
 def render_sidebar():
+    """侧边栏内容渲染（在main()中作为顶层 with st.sidebar 调用）"""
     auth = st.session_state["auth"]
+    # ── 顶部：账户widget（始终显示）────────────────────────────
+    if not auth["logged_in"]:
+        with st.expander("🔐 登录 / 注册", expanded=True):
+            _render_auth_compact()
+    else:
+        with st.expander(f"👤 {auth['username']}（{_get_status_label(auth['username'])}）", expanded=False):
+            _render_account_compact()
 
-    with st.sidebar:
-        # ── 顶部：账户widget（始终显示）────────────────────────────
-        if not auth["logged_in"]:
-            with st.expander("🔐 登录 / 注册", expanded=True):
-                _render_auth_compact()
-        else:
-            with st.expander(f"👤 {auth['username']}（{_get_status_label(auth['username'])}）", expanded=False):
-                _render_account_compact()
+    st.markdown("---")
 
+    # ── 导航：始终可见，用 st.radio 保证稳定渲染 ──────────────
+    st.markdown("**◈ 功能模块**")
+    cur = st.session_state.get("page", "行情数据")
+    page_map = {
+        "📊 行情数据": "行情数据",
+        "✏️ 策略编辑": "策略编辑",
+        "🧪 历史回测": "历史回测",
+        "🎮 模拟交易": "模拟交易",
+        "💹 实盘终端": "实盘终端",
+        "📈 绩效分析": "绩效分析",
+        "🛡️ 风险管理": "风险管理",
+    }
+    # 反查当前 label
+    cur_label = "📊 行情数据"
+    for k, v in page_map.items():
+        if v == cur:
+            cur_label = k
+            break
+    selected = st.radio("导航", list(page_map.keys()), index=list(page_map.keys()).index(cur_label),
+                        label_visibility="collapsed")
+    if page_map[selected] != cur:
+        st.session_state["page"] = page_map[selected]
+        for k in ["pending_order","pending_plan","pending_amount","pending_method"]:
+            if k in st.session_state:
+                del st.session_state[k]
+
+    if auth["logged_in"] and auth["role"] == "admin":
         st.markdown("---")
-
-        # ── 导航：始终可见，用 st.radio 保证稳定渲染 ──────────────
-        st.markdown("**◈ 功能模块**")
-        cur = st.session_state.get("page", "行情数据")
-        page_map = {
-            "📊 行情数据": "行情数据",
-            "✏️ 策略编辑": "策略编辑",
-            "🧪 历史回测": "历史回测",
-            "🎮 模拟交易": "模拟交易",
-            "💹 实盘终端": "实盘终端",
-            "📈 绩效分析": "绩效分析",
-            "🛡️ 风险管理": "风险管理",
-        }
-        # 反查当前 label
-        cur_label = "📊 行情数据"
-        for k, v in page_map.items():
-            if v == cur:
-                cur_label = k
-                break
-        selected = st.radio("导航", list(page_map.keys()), index=list(page_map.keys()).index(cur_label),
-                            label_visibility="collapsed")
-        if page_map[selected] != cur:
-            st.session_state["page"] = page_map[selected]
-            for k in ["pending_order","pending_plan","pending_amount","pending_method"]:
-                if k in st.session_state:
-                    del st.session_state[k]
-
-        if auth["logged_in"] and auth["role"] == "admin":
-            st.markdown("---")
-            if st.button("⚙️ 管理后台", use_container_width=True):
-                st.session_state["page"] = "__admin__"
+        if st.button("⚙️ 管理后台", use_container_width=True):
+            st.session_state["page"] = "__admin__"
 
 
 def _render_auth_compact():
@@ -1253,8 +1252,9 @@ def page_admin():
 def main():
     auth = st.session_state["auth"]
     page = st.session_state.get("page", "行情数据")
-    # 侧边栏
-    render_sidebar()
+    # 侧边栏（顶层调用，确保Streamlit正确渲染）
+    with st.sidebar:
+        render_sidebar()
     # 页面路由
     if page == "__admin__":
         page_admin()
